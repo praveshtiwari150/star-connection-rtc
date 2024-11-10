@@ -1,0 +1,129 @@
+import { useParams } from "react-router-dom"
+import { useHost } from "../context/HostProvider";
+import { useEffect, useRef, useState } from "react";
+import { AiFillAudio } from "react-icons/ai";
+import { BsMicMuteFill } from "react-icons/bs";
+import { HiOutlineVideoCamera, HiOutlineVideoCameraSlash } from "react-icons/hi2";
+import VideoOff from "./VideoOff";
+
+const Room = () => {
+  const params = useParams();
+  const { sessionID } = params
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const [videoConfig, setVideoConfig] = useState({
+    video: true,
+    audio: false
+  });
+  const { email, hostws, hostPC, setHostPC } = useHost();
+  
+
+  const startMeeting = () => {
+    setHostPC(new RTCPeerConnection());
+
+    if (!hostPC) return;
+
+    hostPC.onnegotiationneeded = async () => {
+      try {
+        const offer = await hostPC.createOffer();
+
+        await hostPC.setLocalDescription(offer);
+
+        if (!hostws) return;
+
+        hostws.send(JSON.stringify({ type: 'offer', sdp: hostPC.localDescription }));
+      }
+
+      catch (err) {
+        console.log('Error during negotiation: ', err);
+      }
+    }
+  }
+
+  const getCameraStream = async () => {
+    try {
+
+      if (videoConfig.video) {
+        const stream = await navigator.mediaDevices.getUserMedia(videoConfig);
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+        }
+      }
+      else {
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((track) => track.stop());
+          streamRef.current = null;
+
+          if (videoRef.current) {
+            videoRef.current.srcObject = null;
+          }
+        }
+      }
+    }
+
+    catch (err) {
+      console.log(err);
+    }
+  }
+
+  useEffect(() => {
+    getCameraStream();
+  },[videoConfig])
+
+
+  return (
+    <div className="flex flex-col justify-center items-center gap-4 min-h-[100vh]">
+      <div>{sessionID}</div>
+      <div className="md:w-[768px] flex justify-center items-center">
+        {videoConfig.video ? (
+           <video
+          className="w-full  rounded-lg h-[350px]"
+          ref={videoRef}
+          autoPlay
+          playsInline
+        ></video>
+        ) : (<VideoOff email={email} />)}
+      </div>
+      <div className="flex gap-4 items-center">
+        <button
+          onClick={() => {
+            setVideoConfig((prev) => ({ ...prev, audio: !prev.audio }));
+          }}
+          className={`bg-cobalt-4 p-4 rounded-full ${
+            videoConfig.audio ? "hover:bg-red-500" : "hover:bg-green-500"
+          }`}
+        >
+          {videoConfig.audio ? (
+            <AiFillAudio className="text-2xl" />
+          ) : (
+            <BsMicMuteFill className="text-2xl" />
+          )}
+        </button>
+        <button
+          className={`bg-cobalt-4 p-4 rounded-full ${
+            videoConfig.video ? "hover:bg-red-500" : "hover:bg-green-500"
+          }`}
+          onClick={() => {
+            setVideoConfig((prev) => ({ ...prev, video: !prev.video }));
+          }}
+        >
+          {videoConfig.video ? (
+            <HiOutlineVideoCamera className="text-2xl" />
+          ) : (
+            <HiOutlineVideoCameraSlash className="text-2xl" />
+          )}
+        </button>
+        <button
+          onClick={startMeeting}
+          className="bg-cobalt-4 p-2 rounded-lg hover:bg-inidgo-6"
+        >
+          Start Meeting
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default Room
