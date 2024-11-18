@@ -1,11 +1,27 @@
-import React from 'react'
+import React, { useContext } from 'react';
 
-const PeerProvider = () => {
+interface PeerProviderProps {
+  children: React.ReactNode;
+}
+
+interface PeerContextType {
+  dummy?: string | null;
+}
+
+const PeerContext = React.createContext<PeerContextType | null>(null);
+const dummy = ''
+export const PeerProvider = ({children} : PeerProviderProps) => {
   return (
-    <div>
-      
-    </div>
+    <PeerContext.Provider value={{dummy}}>
+      {children}
+    </PeerContext.Provider>
   )
 }
 
-export default PeerProvider
+export const usePeer = () => {
+  const context = useContext(PeerContext);
+  if (!context) {
+    throw new Error("useHost must be used within a HostProvider");
+  }
+  return context;
+};

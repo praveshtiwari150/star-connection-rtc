@@ -28,7 +28,6 @@ export const HostProvider = ({ children }: HostProviderProps) => {
       console.log("Websocket connection opened");
     };
     setHostWs(ws);
-
     return () => {
       ws.close();
     };

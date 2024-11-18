@@ -14,6 +14,7 @@ const Room = () => {
   const { sessionID } = params;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const peers = useRef<Map<string, RTCPeerConnection>>(new Map());
 
   const [videoConfig, setVideoConfig] = useState({
     video: true,
@@ -24,59 +25,94 @@ const Room = () => {
   console.log("Room email: ", email);
   console.log("sessionID: ", sessionId);
 
-  useEffect(() => {
-    if (!hostPC) {
-      setHostPC(new RTCPeerConnection());
-    }
-  }, [hostPC, setHostPC]);
-
-  const startMeeting = async () => {
-    if (!hostPC || !hostws) return;
-
-    hostPC.onnegotiationneeded = async () => {
-      try {
-        alert("Offer initiated");
-        const offer = await hostPC.createOffer();
-        await hostPC.setLocalDescription(offer);
-        hostws.send(
-          JSON.stringify({ type: "offer", sdp: hostPC.localDescription })
-        );
-      } catch (err) {
-        console.log("Error during negotiation: ", err);
-      }
-    };
-
-    await sendStream();
-  };
-
   const getCameraStream = async () => {
+    console.log("Inside get camera stream");
     try {
       const userMediaStream = await navigator.mediaDevices.getUserMedia(
         videoConfig
       );
+      console.log(userMediaStream);
       setStream(userMediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = userMediaStream;
       }
     } catch (err) {
-      console.log(err);
+      console.error("Error accessing camera:", err);
     }
   };
 
-  const sendStream = async () => {
+  const sendStream = async (pc: RTCPeerConnection) => {
     try {
-      if (!stream || !hostPC) return;
+      if (!stream || !pc) return;
       stream.getTracks().forEach((track) => {
-        hostPC.addTrack(track, stream);
+        pc.addTrack(track, stream);
       });
     } catch (err) {
       console.log("Error while sending stream", err);
     }
   };
 
+  const handleJoinRequest = async (peerEmail: string) => {
+    const pc = new RTCPeerConnection();
+    peers.current.set(peerEmail, pc);
+    hostws?.send(JSON.stringify({type:'join-request-accepted', peerEmail, sessionId}))
+  };
+
+  useEffect(() => {
+    if (!hostws) return;
+
+    hostws.onmessage = async (event) => {
+      const message = JSON.parse(event.data);
+      console.log(hostws);
+
+      switch (message.type) {
+        case "join-request":
+          console.log("Join Request")
+          await handleJoinRequest(message.email);
+          break;
+        case "answer":
+          {
+            const pc = peers.current.get(message.email);
+            if (pc) {
+              await pc.setRemoteDescription(
+                new RTCSessionDescription(message.sdp)
+              );
+            }
+          }
+          break;
+        case "ice-candidate":
+          {
+            const pc = peers.current.get(message.email);
+            if (pc) {
+              await pc.addIceCandidate(new RTCIceCandidate(message.candidate));
+            }
+          }
+          break;
+        default:
+          break;
+      }
+    };
+
+    hostws.onclose = () => {
+      console.log("WebSocket connection closed.");
+    };
+
+    return () => {
+      // Clean up peer connections
+      peers.current.forEach((pc) => pc.close());
+      peers.current.clear();
+    };
+  }, [hostws]);
+
   useEffect(() => {
     getCameraStream();
   }, [videoConfig]);
+
+  useEffect(() => {
+    if (!hostPC) {
+      setHostPC(new RTCPeerConnection());
+    }
+  }, [hostPC, setHostPC]);
 
   const copy = async () => {
     if (!sessionID) return;
@@ -140,12 +176,6 @@ const Room = () => {
           ) : (
             <HiOutlineVideoCameraSlash className="text-2xl" />
           )}
-        </button>
-        <button
-          onClick={startMeeting}
-          className="bg-cobalt-4 p-2 rounded-lg hover:bg-inidgo-6"
-        >
-          Start Meeting
         </button>
       </div>
     </div>

@@ -2,7 +2,6 @@ import { Route, Routes } from "react-router-dom";
 import Home from "./components/Home";
 import Peer from "./components/Peer";
 import Room from "./components/Room";
-import { useHost } from "./context/HostProvider";
 
 function App() {
 
